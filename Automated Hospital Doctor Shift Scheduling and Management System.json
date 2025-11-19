@@ -1,0 +1,378 @@
+{
+  "name": "Automated Hospital Doctor Shift Scheduling and Management System",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtHour": 23,
+              "triggerAtMinute": 59
+            }
+          ]
+        }
+      },
+      "id": "d14f3a9f-186e-4ddd-a63b-a26926caeb33",
+      "name": "Weekly Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [1936, 640]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "googleSheetsDocId",
+              "value": "<__PLACEHOLDER_VALUE__Google Sheets Document ID__>",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "doctorsSheetName",
+              "value": "DOCTORS",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "availabilitySheetName",
+              "value": "AVAILABILITY",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "scheduleSheetName",
+              "value": "WEEKLY_SCHEDULE",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "a42d47bd-3640-431e-a289-d3e7be6a3d16",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2224, 640]
+    },
+
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "=1D69LlQFUNgQbUjSNZhtVvlpZxWA1WXeC90oY4-609V0",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "=Sheet1",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "5eecfc9b-e4b3-47fb-a9ad-2a68b5e41037",
+      "name": "Fetch Doctors List",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [2512, 544],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "z25W0gN38orbKWjp",
+          "name": "Google Sheets account 4"
+        }
+      }
+    },
+
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Workflow Configuration').first().json.googleSheetsDocId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Workflow Configuration').first().json.availabilitySheetName }}"
+        },
+        "options": {}
+      },
+      "id": "9a1a9ffb-2cf8-4f6d-a458-8a171251dd1f",
+      "name": "Fetch Availability Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [2512, 736],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "z25W0gN38orbKWjp",
+          "name": "Google Sheets account 4"
+        }
+      }
+    },
+
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "a37d543a-33fa-4906-8250-5bdc7b6fe67b",
+      "name": "Combine Doctor and Availability Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [2736, 640]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// JS code for preparing AI prompt\nconst doctors = $input.first().json.doctors || [];\nconst availability = $input.first().json.availability || [];\n\nconst today = new Date();\nconst nextMonday = new Date(today);\nnextMonday.setDate(today.getDate() + ((1 + 7 - today.getDay()) % 7 || 7));\n\nconst nextSunday = new Date(nextMonday);\nnextSunday.setDate(nextMonday.getDate() + 6);\n\nconst dateRange = `${nextMonday.toISOString().split('T')[0]} to ${nextSunday.toISOString().split('T')[0]}`;\n\nconst doctorsInfo = doctors.map(doc => `- Dr. ${doc.name} (ID: ${doc.id})`).join(\"\\n\");\n\nconst prompt = `Schedule for ${dateRange}\\n${doctorsInfo}`;\n\nreturn { json:{ prompt, date_range: dateRange }};"
+      },
+      "id": "ee285ae9-9d95-4a13-8905-f139fa6a546b",
+      "name": "Prepare AI Scheduling Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3024, 640]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// Parse schedule\nconst items = $input.all();\nreturn items;"
+      },
+      "id": "62c21ee9-556c-4639-8658-34489c52a16b",
+      "name": "Parse AI Schedule Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3664, 640]
+    },
+
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Workflow Configuration').first().json.googleSheetsDocId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Workflow Configuration').first().json.scheduleSheetName }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "week_start": "={{ $json.week_start }}",
+            "day": "={{ $json.day }}",
+            "morning": "={{ $json.morning }}",
+            "evening": "={{ $json.evening }}",
+            "night": "={{ $json.night }}",
+            "created_at": "={{ $json.created_at }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "f1e0322c-4a62-4f47-9c8d-267485839c0a",
+      "name": "Save Schedule to Database",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [3888, 640],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "z25W0gN38orbKWjp",
+          "name": "Google Sheets account 4"
+        }
+      }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "return $input.all();"
+      },
+      "id": "ae52c837-08f6-4292-8a20-531aeaed1c15",
+      "name": "Prepare Doctor Notifications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4112, 640]
+    },
+
+    {
+      "parameters": {
+        "sendTo": "={{ $json.doctorEmail }}",
+        "subject": "Your Weekly Shift Schedule",
+        "message": "Dear Doctor, your shifts are ready.",
+        "options": {}
+      },
+      "id": "aa8ed242-715d-4600-bf77-ee637f9db3d9",
+      "name": "Email Doctors Their Shifts",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [4336, 640],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "GiT58nt6v7QHoLDm",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+
+    {
+      "parameters": {
+        "formTitle": "Doctor Availability Submission",
+        "formDescription": "Submit your weekly availability",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Doctor ID", "requiredField": true },
+            { "fieldLabel": "Day", "fieldType": "dropdown", "requiredField": true,
+              "fieldOptions": { "values": [
+                { "option": "Monday" }, { "option": "Tuesday" }, { "option": "Wednesday" },
+                { "option": "Thursday" }, { "option": "Friday" }, { "option": "Saturday" },
+                { "option": "Sunday" }
+              ]}},
+            { "fieldLabel": "Shift", "fieldType": "dropdown", "requiredField": true,
+              "fieldOptions": { "values": [
+                { "option": "Morning" }, { "option": "Evening" }, { "option": "Night" }
+              ]}},
+            { "fieldLabel": "Can Work", "fieldType": "dropdown", "requiredField": true,
+              "fieldOptions": { "values": [
+                { "option": "Yes" }, { "option": "No" }
+              ]}}
+          ]
+        },
+        "options": { "appendAttribution": false }
+      },
+      "id": "9cf0a25d-2fcf-42f9-837a-378fae0f5df9",
+      "name": "Doctor Availability Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [1936, 1312]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.duplicateExists }}",
+              "rightValue": "false",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "190cb336-fe4f-4606-8339-5ca8129b1eb8",
+      "name": "Is Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2384, 1312]
+    },
+
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "=1e836Fbxq_yy79Lt0m2XuB7KbTEgzGMHFUcvcr7xHPuo",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "=Sheet1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "doctor_id": "{{ $json.doctor_id }}",
+            "day": "{{ $json.day }}",
+            "shift": "{{ $json.shift }}",
+            "can_work": "{{ $json.can_work }}"
+          }
+        }
+      },
+      "id": "b70ca320-07da-42fa-bc2d-57f08d96c292",
+      "name": "Update Existing Availability",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [2608, 1216],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "z25W0gN38orbKWjp",
+          "name": "Google Sheets account 4"
+        }
+      }
+    },
+
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Workflow Configuration').first().json.googleSheetsDocId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Workflow Configuration').first().json.availabilitySheetName }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "doctor_id": "={{ $('Doctor Availability Form').item.json.doctor_id }}",
+            "day": "={{ $('Doctor Availability Form').item.json.day }}",
+            "shift": "={{ $('Doctor Availability Form').item.json.shift }}",
+            "can_work": "={{ $('Doctor Availability Form').item.json.can_work }}"
+          }
+        }
+      },
+      "id": "47aaca31-3ee5-4ab3-bf5c-0e7382cdf6bf",
+      "name": "Add New Availability",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [2608, 1408],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "z25W0gN38orbKWjp",
+          "name": "Google Sheets account 4"
+        }
+      }
+    },
+
+    {
+      "parameters": {},
+      "id": "d36ed28e-42dc-41e0-b4d8-78721128d45f",
+      "name": "Merge Availability Paths",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [2832, 1312]
+    },
+
+    {
+      "parameters": {
+        "sendTo": "={{ $json.doctor_id }}",
+        "subject": "Availability Submission Confirmed",
+        "message": "Your availability was recorded.",
+        "options": {}
+      },
+      "id": "d8b3cbd7-e8bc-4cde-bb73-ef2bf53a6fd1",
+      "name": "Send Availability Confirmation",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [3040, 1312],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "GiT58nt6v7QHoLDm",
+          "name": "Gmail account 2"
+        }
+      }
+    }
+  ],
+  "connections": {}
+}
